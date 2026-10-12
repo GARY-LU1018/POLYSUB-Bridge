@@ -1,0 +1,37 @@
+node_modules/
+dist/
+coverage/
+runtime/
+work/
+logs/
+secrets/
+config/private/
+docs/internal/
+docs/evidence/
+docs/history/
+docs/PHASE3_RESULT.md
+STARTED_*.md
+*.pid
+*.url
+*.log
+.env
+.env.*
+
+# Local credentials, tunnel state, and durable runtime state. These are never
+# source-release inputs even when a local tool creates them under the checkout.
+bridge-state/
+tunnel-client-local/
+config/private/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.wal
+*.shm
+*.pem
+*.key
+*.p12
+*.pfx
+*.secret
+*.token
+
