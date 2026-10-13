@@ -11,6 +11,11 @@ docs/evidence/
 docs/history/
 docs/PHASE3_RESULT.md
 STARTED_*.md
+# Internal governance, work journals, and pre-publication evidence are not
+# source-release inputs and must stay outside the public export tree.
+ACTIVE_TASK.md
+docs/WORK_JOURNAL_*.md
+docs/THIRD_PARTY_*_20*.md
 *.pid
 *.url
 *.log

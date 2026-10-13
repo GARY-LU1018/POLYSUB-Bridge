@@ -31,6 +31,38 @@ Do not commit:
 
 The bridge's sensitive-file preflight is a runtime guard, not a replacement for repository review.
 
+## HTTP, MCP, and diagnostics boundaries
+
+- `GET /healthz` is an unauthenticated liveness response. It does not prove
+  authentication, Tunnel routing, MCP access, Codex availability, or a
+  host-visible callback.
+- `POST /mcp` and `GET /diagnostics` use the configured Bearer token when
+  authentication is enabled. The MCP `GET` and `DELETE` routes are rejected;
+  the OAuth metadata probes return a local not-configured response rather than
+  configuring an external provider.
+- `/diagnostics` is operationally sensitive. It may report the process
+  executable and entrypoint, project root, owner, process identifiers and
+  times, listener, allowed roots, configured Codex command, build/provenance
+  hashes, Git identifiers, and MCP authentication mode. Keep it behind the
+  same trusted local boundary as the Bridge.
+- The authenticated `bridge_status` tool reports configured roots, sandbox
+  flags, session/job counts, and upstream tool names; it does not read project
+  files. The current core MCP tools are `bridge_status`, `codex_read`,
+  `codex_run`, `codex_reply`, `codex_job_status`, `codex_completion_next`,
+  and `codex_completion_ack`. There is no independent direct-file-read tool;
+  `codex_read` starts a read-only Codex inspection.
+- `codex_run` may use `workspace-write` only when explicitly enabled by
+  `CODEX_GPT_BRIDGE_ALLOW_WRITE=1`. `danger-full-access` is rejected by the
+  Bridge tool path even if a configuration value permits the mode. The
+  `CODEX_GPT_BRIDGE_DISABLE_SECRET_SCAN` setting can explicitly disable the
+  default sensitive-file preflight and should be treated as a deliberate
+  reduction of the safety boundary.
+- When enabled, Blue-Wake adds MCP Apps resources and bounded completion tools;
+  it does not create a second execution path. Durable completion remains in
+  the local outbox until the authenticated completion acknowledgement removes
+  it from future reads. External host rendering and message delivery remain
+  unverified by this source package.
+
 ## Reporting a vulnerability
 
 Please do not open a public issue for an unpatched security vulnerability. Once this project has a GitHub repository, use GitHub private vulnerability reporting or a GitHub Security Advisory for confidential reports. There is no dedicated security email address in this source package.

@@ -19,4 +19,4 @@ This file records user-facing changes. It does not record private development hi
 - No installer or portable package is included or formally released.
 - Tunnel client configuration and provider connectivity are outside this package and are not verified here.
 - Host-visible callback and MCP Apps rendering depend on the external client host and are not verified by local source checks alone.
-- The package metadata declares MIT, but the final `LICENSE` and attribution are not yet confirmed.
+- `LICENSE` records the project attribution as `Copyright (c) 2026 GARY LU`; public-release approval and full third-party notice closure remain separate.

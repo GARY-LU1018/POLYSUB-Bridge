@@ -1,104 +1,80 @@
 # Operate POLYSUB
 
-This guide covers the controls that are present in the current source package.
+This is the daily-use guide for an already configured Bridge/Tunnel connection. It explains how to bring the connection up, confirm that the intended layer is reachable, send work, and follow a completion back to the conversation. Installation, dependencies, builds, and detailed error analysis belong in [BUILD_AND_RUN](BUILD_AND_RUN.md) and [TROUBLESHOOTING](TROUBLESHOOTING.md).
 
-## Start and stop
+The source package does not start or configure an external Tunnel. Use the existing, user-owned Bridge/Tunnel launcher or provider procedure for those controls. Do not treat a local health response as proof that ChatGPT can reach the service.
 
-From the repository directory, with the required environment variables set:
+## Daily startup order
 
-```powershell
-# Development mode
-npm run dev
+Use this order after the machine or service has been stopped:
 
-# Compiled mode
-npm run build
-npm start
-```
+1. Start the local Bridge with the existing launcher. Keep its configured listener, authentication mode, allowed roots, and state directory unchanged.
+2. Check the local Bridge with `/healthz`. If authenticated diagnostics are part of the setup, check `/diagnostics` as well.
+3. Start or attach the external Tunnel using its existing provider procedure. Its destination must point to the Bridge's `/mcp` endpoint, preserving the path and the intended authentication boundary.
+4. In ChatGPT or the MCP client, connect to the configured Tunnel URL and run the MCP handshake. Confirm `initialize`, `tools/list`, and `bridge_status` from the client side.
+5. Only after those checks pass, send a real read-only probe or the intended task.
 
-Press `Ctrl+C` in the running window to request a clean shutdown. The bridge handles `SIGINT` and `SIGTERM`, closes the HTTP server, and closes its Codex App Server child process.
+The source package has no Windows service, scheduled task, background updater, or installer control. A launcher supplied outside this repository is **not yet verified** by these documents.
 
-There is no Windows service, scheduled task, background updater, or installer control in this source package. **Not yet verified:** any service wrapper or desktop launcher supplied outside this repository.
+## Confirming the connection
 
-## Health and diagnostics
+These checks answer different questions:
 
-Health is unauthenticated and reports only that the HTTP process is responding:
+| Check | What it proves | What it does not prove |
+| --- | --- | --- |
+| `/healthz` | The local HTTP process responds. | Tunnel routing, MCP authentication, Codex, or ChatGPT delivery. |
+| `/diagnostics` | The local listener, policy, roots, Codex command, and MCP transport are reported. | That an external client accepted a request. |
+| `initialize` and `tools/list` from ChatGPT/MCP | The client reached the MCP endpoint and received the expected protocol/tool surface. | That Codex can finish a job or that a Widget is rendered. |
+| `bridge_status` from ChatGPT/MCP | The client can call the Bridge and receive its current status. | A successful Codex turn or host-visible completion. |
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8876/healthz
-```
+The normal tool surface is `bridge_status`, `codex_read`, `codex_run`, `codex_reply`, `codex_job_status`, `codex_completion_next`, and `codex_completion_ack`. Blue-Wake resources and tools appear only when `CODEX_GPT_BRIDGE_ENABLE_BLUE_WAKE=1` and still depend on the MCP Apps host.
 
-Diagnostics require the Bearer token unless no-auth mode is enabled:
+## Sending work and watching a task
 
-```powershell
-$headers = @{ Authorization = "Bearer $env:CODEX_GPT_BRIDGE_TOKEN" }
-Invoke-RestMethod http://127.0.0.1:8876/diagnostics -Headers $headers
-```
+Give every operation a new, stable caller-provided `taskId`. Keep that same ID for status, completion, and any Blue-Wake continuation.
 
-Diagnostics expose runtime and policy information such as the listener, allowed roots, sandbox flags, configured Codex command, and MCP transport. They do not prove that an external tunnel or client host accepted a request.
+- Use `codex_read` for a project inspection that must not modify files. It invokes local Codex in forced `read-only` mode.
+- Use `codex_run` only for an intentional execution or change that is allowed by the configured sandbox and the task authorization. Review the requested `cwd`, prompt, and sandbox before sending it.
+- Use `codex_reply` with the returned `threadId` to continue the same Codex session. It is not a replacement for the original task ID.
+- Keep `cwd` inside an existing configured allowed root. With multiple roots, provide the absolute `cwd` explicitly.
+- If a call returns `status: running`, poll `codex_job_status` with the same `taskId`. Do not launch a second copy of the job just because the first call returned quickly.
+- Stop polling when the status is `completed`, `failed`, or `timed_out`, and record which status was actually returned.
 
-## MCP endpoint and tools
+`workspace-write` is an explicit risk change and is available only when the Bridge policy allows it. `danger-full-access` is not a supported operating mode. The sensitive-file preflight remains part of the work-call boundary.
 
-The MCP endpoint accepts `POST /mcp`. A client must use the configured Bearer token and the MCP media types it supports; Streamable HTTP clients commonly send `Accept: application/json, text/event-stream`.
+## Completion, outbox, and Blue-Wake/Widget return
 
-The normal tool set is:
+The normal return path is:
 
-`bridge_status`, `codex_read`, `codex_run`, `codex_reply`, `codex_job_status`, `codex_completion_next`, and `codex_completion_ack`.
+`Codex finishes → completion is written to the durable outbox → ChatGPT/MCP retrieves the result → the result is shown in the conversation or Widget host`
 
-When `CODEX_GPT_BRIDGE_ENABLE_BLUE_WAKE=1` is set, additional completion resources and tools are registered. They remain dependent on the MCP Apps host implementation.
+Use the same `taskId` throughout this path.
 
-## Read-only and workspace-write modes
+1. For a running job, use `codex_job_status` until it reaches a terminal status.
+2. Read a durable result with `codex_completion_next`, supplying the exact `taskId` and, when continuing a sequence, the last seen `after` value. Reading does not consume the result.
+3. Acknowledge it with `codex_completion_ack` only after ChatGPT or the receiving host has safely processed it. Acknowledgement removes it from future durable reads.
+4. If Blue-Wake is enabled, the long-running response may mount the A-side handoff and the B-side completion receiver. The receiver continues through the existing completion path; it does not start a second job or replace `codex_job_status`.
+5. A local outbox result, a resource URI, or a host-capability report does not by itself prove that ChatGPT inserted a message or rendered a Widget. Treat host-visible delivery as confirmed only when the client host provides a visible result or trace.
 
-- The default sandbox is `read-only`.
-- `codex_read` always forces `read-only`.
-- `workspace-write` is available only when `CODEX_GPT_BRIDGE_ALLOW_WRITE=1` is set, and the request explicitly selects it or the default is configured accordingly.
-- `danger-full-access` is rejected by the bridge tools and is not a supported operating mode.
-- The default approval policy is `never`; `untrusted`, `on-request`, and `never` are the accepted configuration values.
+The outbox location is controlled by `CODEX_GPT_BRIDGE_STATE_DIR`, or the default Codex state location when it is absent. Protect it as application data and do not delete pending results.
 
-Treat `workspace-write` as an explicit change of risk. Use a dedicated allowed root and review the prompt before enabling it.
+## Direct file reads: current boundary
 
-## Allowed roots and working directories
+The current Bridge tool surface does **not** expose a separate direct file-read tool. Do not describe `codex_read` as direct file reading: it starts a read-only Codex inspection and requires a `taskId`.
 
-`CODEX_GPT_BRIDGE_ROOTS` must contain one or more existing absolute paths separated by commas. The bridge resolves the path and rejects a `cwd` outside those roots.
+If a future or separately deployed Bridge exposes an independently named file-read tool, confirm it in that connection's `tools/list` response and follow its exact path, root, size, and sensitive-file rules. Only then should a simple read that needs no Codex turn use that tool. Until such a tool is actually listed, use `codex_read` when a read must be performed through this package, and do not claim a direct-read capability.
 
-- With one allowed root, an operation may omit `cwd` and uses that root.
-- With multiple roots, the caller must supply `cwd`.
-- Before `codex_read`, `codex_run`, and `codex_reply`, the bridge scans the selected directory for sensitive-looking files.
-- The scan is enabled by default. Disabling it with `CODEX_GPT_BRIDGE_DISABLE_SECRET_SCAN=1` is an explicit risk decision and should be avoided for shared or sensitive workspaces.
+## Fast fault isolation
 
-## Token and host binding
+Start with the first failed boundary; do not restart every layer at once.
 
-Authentication is enabled when `CODEX_GPT_BRIDGE_TOKEN` is set. `CODEX_GPT_BRIDGE_NO_AUTH=1` bypasses the token only for loopback host values. Do not use no-auth with a non-loopback bind address.
+| First failed check | Most likely boundary | Fast next check |
+| --- | --- | --- |
+| ChatGPT/MCP cannot see `tools/list` or call `bridge_status` | ChatGPT/MCP configuration, Tunnel route, or auth | Test the Tunnel URL and `/mcp` path from the client, then compare with local `/healthz`. |
+| Local `/healthz` fails | Bridge process or local listener | Use the existing Bridge control and inspect `/diagnostics`; do not infer a Tunnel fault yet. |
+| Local health passes but the client cannot reach MCP | Tunnel destination, provider auth, DNS, or client configuration | Confirm the Tunnel points to the exact `/mcp` endpoint and that the client uses the matching auth mode. |
+| `bridge_status` works but `codex_read`/`codex_run` fails | Codex command/App Server, selected `cwd`, sandbox, or sensitive-file preflight | Check the returned task error and the selected allowed root; do not label it a Tunnel failure. |
+| Job is running or terminal but the result is not in the conversation | Job polling, completion retrieval, or outbox correlation | Poll `codex_job_status`, then read `codex_completion_next` with the exact `taskId`; do not acknowledge early. |
+| Outbox has the result but Blue-Wake/Widget is not visible | MCP Apps host capability or host rendering/delivery | Keep the durable result, inspect the host's own trace, and treat Widget insertion as unverified until visibly confirmed. |
 
-`CODEX_GPT_BRIDGE_ALLOWED_HOSTS` is passed to the MCP HTTP application as its host allowlist. It does not create an identity provider or replace the Bearer token.
-
-## Tunnel boundary
-
-The source package does not start, configure, or ship a Tunnel client. Tunnel IDs, provider profiles, provider credentials, remote DNS, network policy, and external health are outside POLYSUB's source configuration.
-
-If an external tunnel is used, verify the local bridge first, keep secrets outside the repository, and make sure its destination and authentication settings match the local `/mcp` endpoint. Provider-side connectivity and host-visible delivery are **Not yet verified** by this repository.
-
-## Completion handling
-
-Long-running work is tracked by the caller-provided `taskId`. If the initial tool call returns `status: running`, poll `codex_job_status` with the same ID until it reports `completed`, `failed`, or `timed_out`.
-
-Completed results are also kept in a local completion outbox. Its location is controlled by `CODEX_GPT_BRIDGE_STATE_DIR`, or by the default Codex state location when that variable is absent. Treat this state as potentially sensitive and protect it like application data.
-
-Optional completion resources are disabled unless `CODEX_GPT_BRIDGE_ENABLE_BLUE_WAKE=1`. The source can expose a completion resource and host-capability report; a local result does not prove that the external host displayed or inserted the completion.
-
-## Update and rollback
-
-There is no automated update or rollback command in the current package.
-
-For a manual update:
-
-1. Stop the running process.
-2. Preserve the current source directory and local state if a rollback may be needed.
-3. Install the new source dependencies with `npm install`.
-4. Run `npm run check` and then `npm run build`.
-5. Start the updated version and repeat `/healthz`, `/diagnostics`, and `bridge_status` checks.
-
-To roll back, stop the process and restore the previously verified source/dependency tree, then repeat the same checks. Do not delete the completion outbox until pending results are no longer needed.
-
-## Uninstall and cleanup
-
-Stop the bridge, remove the source directory if it is no longer needed, and separately review the directory used for `CODEX_GPT_BRIDGE_STATE_DIR` or the default completion outbox. Do not remove state, credentials, Codex data, or external Tunnel profiles without confirming their ownership and purpose.
+Detailed error messages and recovery procedures belong in [TROUBLESHOOTING](TROUBLESHOOTING.md). The source package does not prove provider connectivity, ChatGPT account eligibility, Widget mounting, or host-visible completion on its own.

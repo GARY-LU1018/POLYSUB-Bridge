@@ -189,6 +189,6 @@ True codex-gpt-bridge
 - `CODEX_GPT_BRIDGE_CODEX`：非預設的 Codex 命令；
 - `CODEX_GPT_BRIDGE_ENABLE_BLUE_WAKE`：選用的完成通知功能。
 
-除非你清楚了解變更後果，請保留預設的 loopback 位址與唯讀模式。完整的邊界與診斷 endpoint 請閱讀[操作說明](OPERATIONS.md)與[安全性](../../SECURITY.md)。
+除非你清楚了解變更後果，請保留預設的 loopback 位址與唯讀模式。完整的邊界與診斷 endpoint 請閱讀[操作說明](OPERATIONS.md)與[安全性](../../SECURITY.zh-TW.md)。
 
 本機開發時，`npm run dev` 會直接啟動 TypeScript source，而不是使用編譯後的輸出。這是開發者便利功能，不是第一次啟動時的標準流程。
