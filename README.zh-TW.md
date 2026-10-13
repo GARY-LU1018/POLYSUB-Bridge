@@ -2,7 +2,11 @@
 
 > **目前狀態：source preview／公開原始碼候選版**
 
-POLYSUB 把 AI 對話接到自己電腦上的工作。它是一個本機 Bridge，讓 ChatGPT 或其他 AI 工具把工作要求送給本機 Codex，再把結果帶回原本的對話。
+POLYSUB Bridge 讓你人在外面時，也能直接用手機上的 ChatGPT，透過安全連線遠端控制家裡 Windows 電腦上的 Codex。
+
+你可以讓 ChatGPT 幫你讀取專案、寫程式、修改檔案、執行工作，並把完成結果回傳到原本的 ChatGPT 對話中。
+
+**為什麼特別強調 ChatGPT + Codex？** 因為 POLYSUB Bridge 目前的開發、測試與實際使用環境，就是以 ChatGPT + Codex 為基準。Bridge／Tunnel／MCP 架構也可能適用其他相容的 AI 用戶端或 coding agent，但這些組合沒有經過本專案完整驗證；若使用其他 AI 平台，使用者需要自行研究並設定該平台的 MCP／Connector 整合方式。
 
 POLYSUB 不是 AI 模型，也不是 ChatGPT 或 Codex 的替代品。它是連接層，讓本機專案可以加入 AI 工作流程，同時讓電腦、專案資料夾與執行路徑仍由使用者掌握。
 

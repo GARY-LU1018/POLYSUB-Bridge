@@ -2,7 +2,11 @@
 
 > **Current status: source preview / public source candidate**
 
-POLYSUB connects an AI conversation with work that lives on your own computer. It is a local Bridge for sending requests from ChatGPT or another AI client to Codex and bringing the result back to the conversation.
+POLYSUB Bridge lets you use ChatGPT on your phone to remotely control Codex running on your home Windows PC while you are away.
+
+You can ask ChatGPT to inspect projects, write code, modify files, run tasks, and return the results to the same ChatGPT conversation.
+
+**Why ChatGPT + Codex?** POLYSUB Bridge is currently developed, tested, and used in real workflows with ChatGPT + Codex as its baseline. The Bridge/Tunnel/MCP architecture may also work with other compatible AI clients or coding agents, but those combinations have not been fully verified by this project. If you use another AI platform, you will need to research and configure that platform's MCP/Connector setup yourself.
 
 POLYSUB is not an AI model or a replacement for ChatGPT or Codex. It is the connecting layer that makes a local project available to an AI workflow while keeping the computer, project folders, and execution path under the user's control.
 
