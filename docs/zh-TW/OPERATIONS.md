@@ -52,11 +52,19 @@ source package 沒有 Windows service、scheduled task、背景 updater 或 inst
 
 1. 工作還在執行時，用 `codex_job_status` 輪詢到 terminal status。
 2. 使用 `codex_completion_next` 讀取 durable result，提供完全相同的 `taskId`；若要接續 sequence，也提供上次看到的 `after`。讀取不會消耗 result。
-3. 只有在 ChatGPT 或接收端安全處理結果後，才用 `codex_completion_ack` 確認。確認後，該結果會從後續 durable read 移除。
+3. 取得完整結果後，由既有底層 completion 流程維持結果狀態；本操作流程不要求 ChatGPT 或使用者執行額外確認步驟。
 4. 若啟用 Blue-Wake，長時間呼叫回應可能會掛載 A-side handoff 和 B-side completion receiver。receiver 仍沿用現有 completion path，不會啟動第二份工作，也不取代 `codex_job_status`。
 5. 本機 outbox result、resource URI 或 host-capability report 本身，都不能證明 ChatGPT 已插入訊息或 Widget 已 render。只有 client host 提供可見結果或 trace，才可確認 host-visible delivery。
 
 Outbox 位置由 `CODEX_GPT_BRIDGE_STATE_DIR` 控制；未設定時使用預設 Codex state 位置。請把它當成 application data 保護，不要刪除仍可能需要的 pending result。
+
+### Blue-Wake 完成通知的正確處理
+
+Blue-Wake 只會送出：「工作已完成，請檢閱回報」的完成通知。這個通知**不會自動附上 Codex 的完整執行結果**，也不能當成完整結果本身。
+
+ChatGPT 收到通知後，必須保留通知中的原始 `task_id`，再主動使用 completion/result 查詢工具取得完整 Codex 結果。在目前的 MCP tool surface 中，這個查詢工具是 `codex_completion_next`；如果工作狀態還未結束，先用相同的 `taskId` 呼叫 `codex_job_status`，直到狀態成為 `completed`、`failed` 或 `timed_out`。取得完整結果並安全處理後，才整理並回覆使用者；底層 completion 狀態的後續處理不屬於本操作流程。
+
+因此，不應只把「工作已完成」通知轉述給使用者，也不應把通知文字當成 Codex 回報。只有完成查詢回傳的內容，才是應該整理並回覆給使用者的實際結果。
 
 ## 直接讀檔：目前的邊界
 
@@ -74,7 +82,7 @@ Outbox 位置由 `CODEX_GPT_BRIDGE_STATE_DIR` 控制；未設定時使用預設 
 | 本機 `/healthz` 失敗 | Bridge process 或本機 listener | 使用既有 Bridge control，檢查 `/diagnostics`；先不要判定是 Tunnel 問題。 |
 | 本機 health 成功，但 client 無法到達 MCP | Tunnel destination、provider auth、DNS 或 client 設定 | 確認 Tunnel 指向正確 `/mcp` endpoint，client 使用相同驗證模式。 |
 | `bridge_status` 成功，但 `codex_read`/`codex_run` 失敗 | Codex command/App Server、`cwd`、sandbox 或敏感檔案 preflight | 檢查 task error 與 selected allowed root；不要直接標成 Tunnel 失敗。 |
-| Job 已執行或結束，但對話沒有結果 | Job polling、completion retrieval 或 outbox correlation | 用相同 `taskId` 輪詢 `codex_job_status`，再讀 `codex_completion_next`；不要提早 ack。 |
+| Job 已執行或結束，但對話沒有結果 | Job polling、completion retrieval 或 outbox correlation | 用相同 `taskId` 輪詢 `codex_job_status`，再讀 `codex_completion_next`；不要只依完成通知判定已有完整結果。 |
 | Outbox 有結果，但 Blue-Wake/Widget 沒顯示 | MCP Apps host capability 或 host rendering/delivery | 保留 durable result，查看 host 自己的 trace；在可見確認前視為 Widget insertion 未驗證。 |
 
 詳細錯誤訊息與復原程序請放在 [TROUBLESHOOTING](TROUBLESHOOTING.md)。source package 本身不能證明 provider connectivity、ChatGPT account eligibility、Widget mounting 或 host-visible completion。
